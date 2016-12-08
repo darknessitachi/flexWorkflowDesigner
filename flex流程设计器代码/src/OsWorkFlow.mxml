@@ -1,0 +1,756 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	要解决的问题：
+	1.优化线条视觉效果，让线条圆点智能在四个角移动，而不仅仅位于左上角，不友好 [已解决 2008-8-25]
+	2.双击图标在画布的中心生成新图标
+	3.不要用圆角表示线条方向，用箭头
+	4.(高优)从属性对话框中改变图标的name属性时，线条的fromIcon和toIcon都必须要改[已解决 2008-8-25]
+	5.可以像删除图标一样删除线条
+-->
+
+<mx:Application resize="onApplicationReSize(event);"
+	 creationComplete="onApplicationReSize(event); onContextMenu(event);onCanvasContextMenu(event);" xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" fontSize="12" xmlns:workflow="controls.*">
+	<mx:Script>
+		<![CDATA[
+			import mx.events.DataGridEvent;
+			import mx.controls.TextInput;
+			import mx.events.ItemClickEvent;
+			import util.Utils;
+			import mx.collections.ArrayCollection;
+			import components.ArrowLine;
+			import mx.events.ResizeEvent;
+			import events.IconEvent;
+			import components.FlowIcon;
+			import components.RectBorder;
+			import components.BorderSprite;
+			import mx.controls.Image;
+			import mx.controls.Alert;
+			import mx.events.ListEvent;
+			
+			private var iconArray: Array = new Array(0);//存储所有的图片
+			private var lineArray: Array = new Array(0);//存储所有的线条
+			private var iconPressable: Boolean = false; //存储图标的按下状态
+			
+			//图标右键菜单
+			[Bindable]
+			private var cm: ContextMenu;
+			//画布右键菜单
+			[Bindable]
+			private var canvasCm: ContextMenu;
+			//属性对话框中的数据
+			[Bindable]
+			private var properties: ArrayCollection = new ArrayCollection();
+			
+			internal function onContextMenu(event: Event): void{
+				cm = new ContextMenu();
+				cm.hideBuiltInItems();
+				var mentItem1: ContextMenuItem = new ContextMenuItem("删除");
+				cm.customItems.push(mentItem1);
+				mentItem1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, 
+					function(e: ContextMenuEvent): void{
+						var icon: FlowIcon = FlowIcon(e.contextMenuOwner);
+						icon.selected = true;//先选中
+						clearBorders();
+						//删除所有选中的图标
+						removeIconsFlow();
+					});
+			}
+			
+			//右击画布弹出的菜单
+			internal function onCanvasContextMenu(event: Event): void{
+				canvasCm = new ContextMenu();
+				canvasCm.hideBuiltInItems();
+				//全选菜单项
+				var mi_selectAll: ContextMenuItem = new ContextMenuItem("全选", true);
+				canvasCm.customItems.push(mi_selectAll);
+				mi_selectAll.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,
+					function(event: ContextMenuEvent): void{
+						drawBorders();
+					});
+				//全不选菜单项
+				var mi_selectNotAll: ContextMenuItem = new ContextMenuItem("全不选");
+				canvasCm.customItems.push(mi_selectNotAll);
+				mi_selectNotAll.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT,
+					function(event: ContextMenuEvent): void{
+						clearBorders();
+					});
+				
+				flow.contextMenu = canvasCm;
+			}
+			
+			//改变大小
+			internal function onApplicationReSize(event: Event): void{
+				if(hdbox != null && btnBar != null && vbox != null && tabBar != null){
+					hdbox.width = this.width - 5;
+					hdbox.height = this.height - btnBar.height - 30;
+					vbox.height = hdbox.height;
+					viewstack1.height = vbox.height - tabBar.height
+				}
+			}
+			
+			//鼠标点击流程图画布时,画出一个图标,如果指针不在任何图标上,则清除所有图标的蓝色边框
+			internal function onFlowCanvasMouseDown(event: MouseEvent): void{
+				//如果用户点击的是画布,而不是按钮冒泡过来的事件
+				if(!(event.target is FlowIcon)){
+					if(icons.selectedItem != null){
+						if(icons.selectedIndex != 0 && icons.selectedIndex != 1){
+							var newImage: FlowIcon = new FlowIcon(icons.selectedItem.icon,
+								icons.selectedIndex);
+							newImage.label = icons.selectedItem.label;
+							//var newImage : Image = new Image();
+							//newImage.source = icons.selectedItem.icon;
+							//定位图标
+							var p: Point = new Point();
+							p = flow.globalToLocal(new Point(mouseX, mouseY));//转换坐标
+							newImage.x = p.x;
+							newImage.y = p.y;
+							
+							//newImage.addEventListener(MouseEvent.MOUSE_DOWN, onImageMouseDown);
+							//newImage.addEventListener(MouseEvent.MOUSE_UP, onImageMouseUp);
+							newImage.addEventListener(IconEvent.ICON_MOUSE_DOWN, onIconMouseDown);
+							newImage.addEventListener(IconEvent.ICON_MOUSE_UP, onIconMouseUp);
+							newImage.addEventListener(IconEvent.ICON_MOVE, onIconMove);
+							//图片自动生成一个名字
+							var n: String = Utils.randomString(10);
+							newImage.name = "Name" + n;
+							newImage.contextMenu = cm;
+							
+							//添加到图标集合中去
+							iconArray.push(newImage);
+							flow.addChild(newImage);
+						}else{
+							this.clearBorders();
+							properties.removeAll();
+						}
+						icons.selectedIndex = 0; //重新选择第一个,不然老是添加了.
+					}
+				}
+			}
+			
+			//当单击流程图画布上的图标时,呈选中状态,并出现发光效果.
+			internal function onIconMouseDown(event: IconEvent): void{
+				var img: FlowIcon = FlowIcon(event.icon);
+				
+				//建立连线
+				var line: ArrowLine = this.drawLine(img);
+				if(line != null){
+					lineArray.push(line);
+				}
+				icons.selectedIndex = 0;
+				
+				//添加选中效果(发光)
+				glow1.target = img;//将效果指定到图标上(编程时不是为图标设置效果)
+				glow1.end();
+				glow1.play();
+				
+				this.clearBorders(); //删除所有图标的边框
+				
+				//判断是否已经加了蓝色边框,如果加了就不需要再加了,只发光就行.
+				//img.numChildren == 2的意思是:FlowIcon上已经有了图标和文字,没有边框
+				if(img.numChildren == 2){
+					//numChildren == 2表示还没有加蓝色边框
+					this.drawBorder(img);
+				}
+				
+				//设置属性对话框
+				if(this.getSelectedIconCount() == 1)
+					this.setProperties(img);
+				else
+					properties.removeAll();
+				
+				iconPressable = true;
+				//实施拖动
+				img.startDrag();
+			}
+			
+			/**
+			 * 拖动图标时重画与该图标相关的线条
+			 */
+			internal function onIconMove(event: IconEvent): void{
+				if(iconPressable && event.target is FlowIcon){
+					reDrawIcon(FlowIcon(event.target));
+					
+					this.setProperties(FlowIcon(event.icon));
+				}
+			}
+			
+			internal function onIconMouseUp(event: IconEvent): void{
+				var img: Image = Image(event.icon);
+				glow2.target = img;
+				glow2.end();
+				glow2.play();
+				
+				iconPressable = false;
+				
+				//停止拖动
+				img.stopDrag();
+			}
+			
+			internal function onTabIndexChanged(event: ItemClickEvent): void{
+				if(event.index == 1){
+					if(xmlHTML != null){
+						xmlHTML.htmlText = this.xmlContent();
+					}
+				}
+			}
+			
+			internal function onXmlHTMLComplete(event: Event): void{
+				xmlHTML.htmlText = this.xmlContent();
+			}
+			
+			/**
+			 * 数据网格编辑完成
+			 */
+			internal function onGridEditEnd(event: DataGridEvent): void{
+				var tf: TextInput = TextInput(dgProp.itemEditorInstance);
+				var value: String = tf.text;
+				//如果只有一个图标被选择
+				var icon: FlowIcon = this.hasSelectedIcon();
+				if(icon != null){
+					switch(event.rowIndex){
+						case 0:
+							//从属性对话框中改变图标的name属性时，线条的fromIcon和toIcon都必须要改
+							var length: int = lineArray.length;
+							var line: ArrowLine = null;
+							for(var i: int = 0; i < length; i ++){
+								line = ArrowLine(lineArray[i]);
+								if(line.fromIcon == icon.name){
+									line.fromIcon = value;
+								}
+								if(line.toIcon == icon.name){
+									line.toIcon = value;
+								}
+							}
+							
+							icon.name = value;
+							break;
+						case 1:
+							icon.label = value;
+							break;
+						case 2:
+							icon.memo = value;
+							break;
+						case 3:
+							var n: Number = Number(value);
+							if(n < 0) n = 0;
+							icon.x = n;
+							tf.text = n + "";
+							break;
+						case 4:
+							n = Number(value);
+							if(n < 0) n = 0;
+							icon.y = n;
+							tf.text = n + "";
+							break;
+						case 5:
+							tf.text = icon.selected + "";
+							break;
+						case 6:
+							tf.text = this.getType(icon.type);
+							break;
+					}
+					
+					reDrawIcon(icon);//重画
+				}
+				
+			}
+			
+			/**
+			 * 移动图标或从属性对话框里设置值时重新画一次
+			 * 改变线程的XY坐标后会自动重画, 在ArrowLine.cs中已实现
+			 */
+			private function reDrawIcon(icon:  FlowIcon): void{
+				if(icon.x <= 0) icon.x = 0;
+					if(icon.y <= 0) icon.y = 0;
+					
+					//起始的
+					var ac: ArrayCollection = this.getLines(icon.name, true);
+					var length: int = ac.length;
+					var line: ArrowLine = null;
+					for(var i: int = 0; i < length; i ++){
+						line = ArrowLine(ac.getItemAt(i));
+						line.startX = icon.width / 2 + icon.x;
+						line.startY = icon.height / 2 + icon.y;
+					}
+					
+					//结束的
+					ac = this.getLines(icon.name, false);
+					length = ac.length;
+					var p: Point = null;
+					for(i = 0; i < length; i ++){
+						line = ArrowLine(ac.getItemAt(i));
+						p = this.getEndDotPosition(this.findIcon(line.fromIcon), icon);
+						line.endX = p.x;
+						line.endY = p.y;
+					}
+			}
+			
+			/**
+			 * 为指定图标添加边框
+			 */
+			private function drawBorder(img: FlowIcon): void{
+				var rect: RectBorder = new RectBorder(2, 0xFF0000, img.width, img.height, 0x000000, 2,2);
+				img.selected = true; //保存选中状态
+				img.addChild(rect);
+			}
+			
+			/**
+			 * 删除画布上所有的图标边框
+			 */
+			private function drawBorders():void{
+				var length: int = flow.numChildren;
+				var icon: Object = null;
+				properties.removeAll();
+				for(var i: int = 0; i < length; i ++){
+					icon = flow.getChildAt(i);
+					if(icon is FlowIcon){
+						this.drawBorder(FlowIcon(icon));
+					}
+				}
+			}
+			
+			//清除所有图标的边框
+			private function clearBorders(): void{
+				var currentImage: FlowIcon = null;
+				for(var i: int = 0; i < flow.numChildren; i ++){
+					if(flow.getChildAt(i) is mx.controls.Image){
+						//找到当前的图标
+						currentImage = FlowIcon(flow.getChildAt(i));
+						//找到当前图标带蓝色方框的, 清除该方框
+						if(this.hasBorderSprite(currentImage)){
+							for(var j: int = currentImage.numChildren - 1; j >= 0; j --){
+								if(this.hasBorderSprite(currentImage)){
+									currentImage.selected = false;
+									currentImage.removeChildAt(j);
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			//检查Image内有没有BorderSprite,以便判断是否有蓝色边框
+			private function hasBorderSprite(iconImage: Image): Boolean{
+				for(var j: int = iconImage.numChildren - 1; j >= 0 ; j --){
+					if(iconImage.getChildAt(j) is RectBorder){
+						return true;
+					}
+				}
+				return false;
+			}
+			
+			/**
+			 * 判断在画布内是否有选中的图标,如果有,则返回该图标,否则返回null
+			 * 如果同时有多个图标被选择，则以第一个为准
+			 */
+			private function hasSelectedIcon(): FlowIcon{
+				var icon: FlowIcon = null;
+				for(var i: int = 0; i < iconArray.length; i ++){
+					icon = FlowIcon(iconArray[i]);
+					if(icon.selected){
+						return icon;
+					}
+				}
+				return null;
+			}
+			
+			//画线
+			private function drawLine(img: FlowIcon): ArrowLine{
+				//先判断选择的是选择图标
+				if(icons.selectedIndex == 1){
+					//判断之前是否有选择的起始图标
+					var beforeSelectedIcon: FlowIcon = this.hasSelectedIcon();
+					
+					if(beforeSelectedIcon != null && beforeSelectedIcon != img){
+						if(hasLine(beforeSelectedIcon.name, img.name)){
+							Alert.show("对不起,直线已存在", "错误");
+							return null;
+						}
+						//在当前图标和之前选中的图标之间画线条
+						//计算中心点
+						var centerStartX: int = beforeSelectedIcon.width / 2;
+						var centerStartY: int = beforeSelectedIcon.height / 2;
+						
+						var p: Point = this.getEndDotPosition(beforeSelectedIcon, img);
+						
+						var line: ArrowLine = new ArrowLine(
+							centerStartX + beforeSelectedIcon.x,
+							centerStartY + beforeSelectedIcon.y,
+							p.x,
+							p.y,
+							0x000000,
+							1,
+							3,
+							0x000000
+						);
+						
+						//从..开始,到..结束
+						line.fromIcon = beforeSelectedIcon.name;
+						line.toIcon = img.name;
+						line.name = "Line" + Utils.randomString(10);
+						flow.addChild(line);
+						return line;
+					}
+				}
+				return null;
+			}
+			
+			/**
+			 * 画线时获取线条终点的坐标
+			 * 判断终点图标和起始图标的相对位置,共九个
+			 * 位置:左上,中上,右上;左中,中中,右中,左下,中下,右下
+			 */
+			private function getEndDotPosition(startIcon: FlowIcon, endIcon: FlowIcon): Point{
+				var space: Number = 50;
+				
+				//计算起始点的中心点坐标
+				var startCenterX: Number = startIcon.x + startIcon.width / 2;
+				var startCenterY: Number = startIcon.y + startIcon.height / 2;
+				
+				//计算终点的中心点坐标
+				var endCenterX: Number = endIcon.x + endIcon.width / 2;
+				var endCenterY: Number = endIcon.y + endIcon.height / 2;
+				
+				var p: Point = new Point();
+				
+				//1左上
+				if(endCenterX <= startCenterX - space && endCenterY <= startCenterY - space){
+					p.x = endIcon.x + endIcon.width;
+					p.y = endIcon.y + endIcon.height;
+					//trace("左上");
+				}
+				//2中上
+				else if(endCenterX >= startCenterX - space && endCenterX <= startCenterX + space
+					&& endCenterY < startCenterY - space){
+					p.x = endIcon.x + endIcon.width / 2;
+					p.y = endIcon.y + endIcon.height;
+					//trace("中上");
+				}
+				//3右上
+				else if(endCenterX >= startCenterX + space && endCenterY <= startCenterY - space){
+					p.x = endIcon.x;
+					p.y = endIcon.y + endIcon.height;
+					//trace("右上");
+				}
+				//4中左
+				else if(endCenterX <= startCenterX - space && 
+					endCenterY >= startCenterY - space && endCenterY <= startCenterY + space){
+					p.x = endIcon.x + endIcon.width;
+					p.y = endIcon.y + endIcon.height / 2;
+					//trace("中左");
+				}
+				//5中中
+				else if(endCenterX >= startCenterX - space && endCenterX <= startCenterX + space
+					&& endCenterY >= startCenterY - space && endCenterY <= startCenterY + space){
+					p.x = endIcon.x;
+					p.y = endIcon.y;
+					//trace("中中");
+				}
+				//6中右
+				else if(endCenterX >= startCenterX + space && 
+					endCenterY >= startCenterY - space && endCenterY <= startCenterY + space){
+					p.x = endIcon.x;
+					p.y = endIcon.y + endIcon.height / 2;
+					//trace("中右");
+				}
+				//7下左
+				else if(endCenterX <= startCenterX - space && endCenterY >= startCenterY + space){
+					p.x = endIcon.x + endIcon.width;
+					p.y = endIcon.y;
+					//trace("下左");
+				}
+				//8下中
+				else if((endCenterX >= startCenterX - space && endCenterX <= startCenterX + space) &&
+					endCenterY >= startCenterY + space){
+					p.x = endIcon.x + endIcon.width / 2;
+					p.y = endIcon.y;
+					//trace("下中");
+				}
+				//9右中
+				else if(endCenterX >= startCenterX + space && endCenterY >= startCenterY + space){
+					p.x = endIcon.x;
+					p.y = endIcon.y;
+					//trace("右中");
+				}
+				
+				return p;
+			}
+			
+			//判断两个图标之间是否已经有直线
+			private function hasLine(fromIcon: String, toIcon: String): Boolean{
+				var line: ArrowLine = null;
+				var length: int = lineArray.length;
+				for(var i:int = 0; i < length; i ++){
+					line = ArrowLine(lineArray[i]);
+					if(line.fromIcon == fromIcon && line.toIcon == toIcon){
+						return true;
+					}
+				}
+				return false;
+			}
+			
+			/**
+			 * 找到指定图标上所有的线条集合
+			 */
+			private function getLines(iconName: String, start: Boolean): ArrayCollection{
+				var ac: ArrayCollection = new ArrayCollection();
+				//遍历线条
+				var length: int = lineArray.length;
+				for(var i: int = 0; i < length; i ++){
+					var obj: * = lineArray[i];
+					if(start && obj.fromIcon == iconName){
+						ac.addItem(obj);
+					}else if((!start) && (obj.toIcon == iconName)){
+						ac.addItem(obj);						
+					}
+				}
+				return ac;
+			}
+			
+			/**
+			 * 删除与指定图标关联的所有线条
+			 */
+			private function removeLines(icon: FlowIcon): void{
+				var length: int = lineArray.length;
+				var line: ArrowLine = null;
+				for(var i: int = length - 1; i >= 0 ; i --){
+					line = lineArray[i];
+					if(line.fromIcon == icon.name || line.toIcon == icon.name){
+						flow.removeChild(line);
+						lineArray.splice(i, 1); //同时删除数组中对应的元素
+					}
+				}
+			}
+			
+			/**
+			 * 删除多个图标
+			 */
+			private function removeIcons(icons: ArrayCollection): void{
+				var icon: FlowIcon = null;
+				var length: int = icons.length;
+				for(var i: int = 0; i < length; i ++){
+					icon = FlowIcon(icons.getItemAt(i));
+					this.removeIcon(icon);
+				}
+			}
+			
+			/**
+			 * 删除一个图标
+			 */
+			private function removeIcon(icon: FlowIcon): void{
+				var length: int = iconArray.length;
+				var curIcon: FlowIcon = null;
+				//删除事件
+				icon.removeEventListener(IconEvent.ICON_MOUSE_DOWN, onIconMouseDown);
+				icon.removeEventListener(IconEvent.ICON_MOUSE_UP, onIconMouseUp);
+				icon.removeEventListener(IconEvent.ICON_MOVE, onIconMove);
+				flow.removeChild(icon); //删除图标
+				//删除该图标上的所有直线
+				this.removeLines(icon);
+				
+				//删除数组中的元素
+				for(var i: int = length - 1; i >= 0; i --){
+					curIcon = iconArray[i];
+					if(curIcon.name == icon.name){
+						iconArray.splice(i, 1);
+					}
+				}
+				
+				//清空属性对话框
+				properties.removeAll();
+			}
+			
+			/**
+			 * 删除画布上的所有选中图标
+			 */
+			private function removeIconsFlow(): void{
+				var length: int = flow.numChildren;
+				var obj: Object = null;
+				for(var i: int = length - 1; i >= 0; i --){
+					obj = flow.getChildAt(i);
+					if(obj is FlowIcon){
+						if(obj.selected){
+							this.removeIcon(FlowIcon(obj));
+						}
+					}
+				}
+			}
+			
+			/**
+			 * 返回选中的图标个数
+			 */
+			private function getSelectedIconCount(): int{
+				var length: int = iconArray.length;
+				var total: int = 0;
+				for(var i: int = 0; i < length; i ++){
+					if(iconArray[i].selected){
+						total ++;
+					}
+				}
+				return total;
+			}
+			
+			/**
+			 * 找到指定图标的关联图标(只找与之关联的起点图标)
+			 */
+			private function getRelationIcons(icon: FlowIcon): ArrayCollection{
+				var ac: ArrayCollection = new ArrayCollection();
+				//先找到该图标上的所有线条（该图标为终点），再找与该线条相关的起点
+				var length: int = lineArray.length;
+				var line: ArrowLine = null;
+				for(var i: int = 0; i < length; i ++){
+					line = ArrowLine(lineArray[i]);		
+					if(line.toIcon == icon.name){
+						ac.addItem(this.findIcon(line.fromIcon));
+					}
+				}
+				return ac;
+			}
+			
+			/**
+			 * 根据图标的名称找到该图标
+			 */
+			private function findIcon(name: String): FlowIcon{
+				var length: int = iconArray.length;
+				for(var i: int = 0; i < length; i ++){
+					if(iconArray[i].name == name){
+						return iconArray[i];
+					}
+				}
+				return null;
+			}
+			
+			private function xmlContent():String{
+				var x: String = "&lt;workflow&gt;<br>";
+				var node: String = "";
+				var length: int = iconArray.length;
+				for(var i: int = 0; i < length; i ++){
+					node = Utils.space(4) + "&lt;" + Utils.nodeHTML("node") + 
+						" " + Utils.attributeHTML("name") + "=\"" + iconArray[i].name + 
+						"\" " + Utils.attributeHTML("label") + "=\"" +  iconArray[i].label +
+						"\" " + Utils.attributeHTML("type") + "=\"" + iconArray[i].type +
+						"\" " + Utils.attributeHTML("selected") + "=\"" + iconArray[i].selected +
+						"\" " + Utils.attributeHTML("memo") + "=\"" + iconArray[i].memo +
+						"\" " + Utils.attributeHTML("x") + "=\"" + iconArray[i].x +
+						"\" " + Utils.attributeHTML("y") + "=\"" + iconArray[i].y +
+						"/&gt;";
+						
+					x += node + "<br>";
+				}
+				
+				length = lineArray.length;
+				for(i = 0; i < length; i ++){
+					node = Utils.space(4) + "&lt;" + Utils.nodeHTML("line") + 
+						" " + Utils.attributeHTML("name") + "=\"" +  lineArray[i].name +
+						"\" " + Utils.attributeHTML("startX") + "=\"" + lineArray[i].startX + 
+						"\" " + Utils.attributeHTML("startY") + "=\"" +  lineArray[i].startY +
+						"\" " + Utils.attributeHTML("endX") + "=\"" + lineArray[i].endX +
+						"\" " + Utils.attributeHTML("endY") + "=\"" + lineArray[i].endY +
+						"\" " + Utils.attributeHTML("fromIcon") + "=\"" + lineArray[i].fromIcon +
+						"\" " + Utils.attributeHTML("toIcon") + "=\"" + lineArray[i].toIcon +
+						"/&gt;";
+						
+					x += node + "<br>";
+				}
+				x += "&lt;/workflow&gt;";
+				return x;
+			}
+			
+			private function setProperties(icon:FlowIcon): void{
+				properties.removeAll();
+				
+				properties.addItem({name: "名称", value: icon.name});	
+				properties.addItem({name: "标签", value: icon.label});
+				properties.addItem({name: "备注", value: icon.memo});
+				properties.addItem({name: "X坐标", value: icon.x});	
+				properties.addItem({name: "Y坐标", value: icon.y});	
+				properties.addItem({name: "选择", value: icon.selected});
+				properties.addItem({name: "类型", value: getType(icon.type)});			
+			}
+			
+			private function getType(index: int): String{
+				return index == 2 ? "流程" : 
+					index == 3 ? "计算" : 
+					index == 4 ? "页面" : 
+					index == 5 ? "调用" : 
+					index == 6 ? "分支" : 
+					index == 7 ? "会合" : 
+					index == 8 ? "开始" : "结束";
+			}
+			
+			//test
+			private function printIconsStatus(): void{
+				for(var i: int = 0; i < iconArray.length; i ++){
+					if(iconArray[i] is FlowIcon){
+						trace(FlowIcon(iconArray[i]).selected);
+					}
+				}
+			}
+			
+		]]>
+	</mx:Script>
+	
+	<mx:Glow id="glow1" blurXFrom="0" color="0xFF0000" blurXTo="15" blurYFrom="0" blurYTo="15" />
+	<mx:Glow id="glow2" alphaFrom="50" alphaTo="0" blurXFrom="15" color="0x00FF00" blurXTo="0" blurYFrom="15" blurYTo="0" />
+	
+	
+	<mx:ButtonBar x="0" y="10" width="506" id="btnBar" height="24">
+		<mx:Array>
+			<mx:String>打开</mx:String>
+			<mx:String>新建</mx:String>
+			<mx:String>保存</mx:String>
+			<mx:Object></mx:Object>
+			<mx:String>全选</mx:String>
+			<mx:String>删除</mx:String>
+			<mx:Object></mx:Object>
+			<mx:String>水平对齐</mx:String>
+			<mx:String>垂直对齐</mx:String>
+		</mx:Array>
+	</mx:ButtonBar>
+	
+	
+	<mx:HDividedBox y="42" width="813" height="478" id="hdbox">
+		<mx:VDividedBox height="100%" width="271">
+			<mx:Panel x="10" y="51" width="100%" height="239" layout="absolute" title="添加控件">
+				<mx:TileList id="icons" doubleClickEnabled="true" x="0" y="0" width="100%" height="100%">
+					<mx:Object label="选择" icon="@Embed('../asserts/4.png')"></mx:Object>
+					<mx:Object label="连线" icon="@Embed('../asserts/2.png')"></mx:Object>
+					<mx:Object label="流程" icon="@Embed('../asserts/1.png')"></mx:Object>
+					<mx:Object label="计算" icon="@Embed('../asserts/3.png')"></mx:Object>
+					<mx:Object label="页面" icon="@Embed('../asserts/5.png')"></mx:Object>
+					<mx:Object label="调用" icon="@Embed('../asserts/6.png')"></mx:Object>
+					<mx:Object label="分支" icon="@Embed('../asserts/7.png')"></mx:Object>
+					<mx:Object label="会合" icon="@Embed('../asserts/8.png')"></mx:Object>
+					<mx:Object label="开始" icon="@Embed('../asserts/9.png')"></mx:Object>
+					<mx:Object label="结束" icon="@Embed('../asserts/10.png')"></mx:Object>
+				</mx:TileList>
+			</mx:Panel>
+			<mx:Panel title="属性对话框" width="100%">
+				<mx:DataGrid id="dgProp" width="100%" height="100%" editable="true" itemEditEnd="onGridEditEnd(event);">
+					<mx:columns>
+						<mx:DataGridColumn sortable="false" headerText="名称" width="80" dataField="name" editable="false"/>
+						<mx:DataGridColumn sortable="false" headerText="值" dataField="value" wordWrap="true"/>
+					</mx:columns>
+					<mx:dataProvider>
+						{properties}
+					</mx:dataProvider>
+				</mx:DataGrid>
+			</mx:Panel>
+		</mx:VDividedBox>
+		
+		
+		<mx:VBox id="vbox" verticalGap="0" width="517" height="430">
+			<mx:TabBar itemClick="onTabIndexChanged(event)" x="0" y="0" dataProvider="viewstack1" id="tabBar"/>
+			<mx:ViewStack id="viewstack1" width="100%" height="321">
+				<workflow:CrossCanvas id="flow" borderStyle="solid" 
+					width="100%" height="100%"
+					mouseDown="onFlowCanvasMouseDown(event);">
+				</workflow:CrossCanvas>
+				<mx:Canvas id="xmlCanvas" borderStyle="solid" label="XML">
+					<mx:TextArea fontSize="14" creationComplete="onXmlHTMLComplete(event)" x="0" y="0" width="100%" height="100%" id="xmlHTML"/>
+				</mx:Canvas>
+			</mx:ViewStack>
+		</mx:VBox>
+	</mx:HDividedBox>
+	
+</mx:Application>

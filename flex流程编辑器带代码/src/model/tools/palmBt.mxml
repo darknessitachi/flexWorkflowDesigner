@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Button xmlns:mx="http://www.adobe.com/2006/mxml" icon="{hander}" selected="{ToolState.palmCurrentState}" >
+	<mx:Script>
+		<![CDATA[
+			import mx.effects.Move;
+			import mx.core.Application;
+			
+			import model.tools.ToolState;
+			import mx.controls.Alert;
+			
+			[Embed(source="/assets/hander.png")] private const  hander:Class;
+			 private var dragmove:Move = new Move();
+		 
+			override protected function clickHandler(event:MouseEvent):void{
+				ToolState.palmCurrentState = !ToolState.palmCurrentState;
+				
+				if(ToolState.palmCurrentState){
+					cursorManager.setCursor(hander);
+				}else{
+					cursorManager.removeAllCursors();
+				}
+				dragmove.target = Application.application.dragCanvas;
+				//  dragmove.xBy = 20;
+				//  dragmove.yBy = 20;
+			//	  dragmove.play();
+			
+		//var newpoint:Point = new Point(
+				  
+				  Application.application.dragCanvas.move(Application.application.dragCanvas.x+20,Application.application.dragCanvas.y+20);
+				  
+			}
+			
+			
+			
+		]]>
+	</mx:Script>
+</mx:Button>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Button xmlns:mx="http://www.adobe.com/2006/mxml" icon="{zoomin}"  >
+	<mx:Script>
+		<![CDATA[
+			
+			import model.tools.ToolState;
+			import mx.controls.Alert;
+			
+			[Embed(source="/assets/zoomin.png")] private const  zoomin:Class;
+			 
+		 
+			override protected function clickHandler(event:MouseEvent):void{
+				 
+			}
+			
+			
+			
+		]]>
+	</mx:Script>
+</mx:Button>

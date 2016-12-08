@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Button xmlns:mx="http://www.adobe.com/2006/mxml" icon="{savePic}"  >
+	<mx:Script>
+		<![CDATA[
+			
+			import model.tools.ToolState;
+			import mx.controls.Alert;
+			
+			[Embed(source="/assets/savePic.png")] private const  savePic:Class;
+			 
+		 
+			override protected function clickHandler(event:MouseEvent):void{
+				 
+				 
+				  
+			}
+			override protected function mouseDownHandler(event:MouseEvent):void{
+			 
+				trace("mouseDownHandler");
+			}
+			
+			
+		]]>
+	</mx:Script>
+</mx:Button>

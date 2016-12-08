@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:ApplicationControlBar xmlns:mx="http://www.adobe.com/2006/mxml" xmlns:tools="model.tools.*"  width="100%" height="40">
+	<mx:Script>
+		<![CDATA[
+			import mx.containers.ViewStack;
+			
+			[Bindable] public var vsData:ViewStack;
+			
+			
+		]]>
+	</mx:Script>
+	<tools:newDocBt  label="新建"  />
+		<tools:saveDocBt label="保存" />
+		<tools:savaPicBt label="保存图片"/>
+		<tools:zoominBt label="放大" />
+		<tools:zoomoutBt label="缩小" />
+		<tools:printBt label="打印" />
+		<tools:palmBt />
+		<tools:littleArrowBt />
+		 
+		<mx:Spacer width="100%" />
+		<mx:ToggleButtonBar dataProvider="{vsData}" />
+</mx:ApplicationControlBar>

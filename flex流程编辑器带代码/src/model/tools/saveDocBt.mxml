@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Button xmlns:mx="http://www.adobe.com/2006/mxml" icon="{saveDoc}"  >
+	<mx:Script>
+		<![CDATA[
+			
+			import model.tools.ToolState;
+			import mx.controls.Alert;
+			
+			[Embed(source="/assets/saveDoc.png")] private const  saveDoc:Class;
+			 
+		 
+			override protected function clickHandler(event:MouseEvent):void{
+				 
+				 
+				  
+			}
+			
+			
+			
+		]]>
+	</mx:Script>
+</mx:Button>

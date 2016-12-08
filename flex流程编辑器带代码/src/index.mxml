@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application xmlns:mx="http://www.adobe.com/2006/mxml" show="showw();" layout="absolute"  updateComplete="updateOk();"  creationComplete="init();" xmlns:model="model.*"  xmlns:objecthandles="com.roguedevelopment.objecthandles.*" xmlns:tools="model.tools.*" xmlns:local="*">
+	<mx:states>
+		<mx:State name="readonlyState">
+			<mx:RemoveChild target="{editerPanel}"/>
+		</mx:State>
+	</mx:states>
+<mx:Style>
+Application{
+	fontSize:12;
+}
+.toolTip{
+	fontSize:12;
+}
+</mx:Style>
+<mx:Script source="control/indexas.as" />
+	<tools:toolsBar vsData="{doArea}" />
+	<mx:HBox width="100%" left="10" top="50" bottom="0">
+		<mx:VBox width="150" height="100%"  id="editerPanel">
+			<mx:Panel layout="absolute" width="100%" height="210"  title="工具栏" horizontalAlign="center" verticalAlign="middle">
+			<mx:VBox x="0" y="10" width="100%" height="100%"  horizontalAlign="center" verticalAlign="top" verticalGap="20">
+			<!--	<mx:Button  skin="{arrowskin}" click="normalArrowClick();" />-->
+				<mx:Button label="任务点" skin="{taskitemskin}"   width="70" height="30" mouseDown="taskitemMouseMoveHandler(event);" /> <!--  -->
+				<model:SingleLineIcon id="singleLineIcon"  />
+				<model:DoubleLineIcon id="doubleLineIcon" />
+				<mx:Button label="清空画布" click="clearStage(); "/>
+			</mx:VBox>
+		</mx:Panel> 
+		
+		<mx:Panel   width="100%" height="100%" layout="absolute" title="属性">
+			<mx:Form x="0" width="100%" height="100%">
+				<mx:FormItem label="长：">
+					<mx:TextInput width="40"/>
+				</mx:FormItem>
+				<mx:FormItem label="宽：">
+					<mx:TextInput width="40"/>
+				</mx:FormItem>
+			</mx:Form>
+			</mx:Panel>
+		</mx:VBox>
+	 	<mx:ViewStack id="doArea"  width="100%" height="100%" backgroundColor="0xffffff">
+	 		
+		 	<model:DragCanvas id="dragCanvas" label="设计模式"   >
+			 	<model:DrawCanvas id="drawCanvas"   />
+			</model:DragCanvas>
+			<model:EditerModel label="源码模式" id="sourceModel" />
+		 </mx:ViewStack>
+	</mx:HBox>
+</mx:Application>
+ 

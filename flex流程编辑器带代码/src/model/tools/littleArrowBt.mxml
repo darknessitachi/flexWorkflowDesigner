@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Button xmlns:mx="http://www.adobe.com/2006/mxml" icon="{littleArrow}"  >
+	<mx:Script>
+		<![CDATA[
+			
+			import model.tools.ToolState;
+			import mx.controls.Alert;
+			
+			[Embed(source="/assets/littleArrow.png")] private const  littleArrow:Class;
+			 
+		 
+			override protected function clickHandler(event:MouseEvent):void{
+				 
+				 cursorManager.removeAllCursors();
+				 ToolState.palmCurrentState = false;
+				  
+			}
+			
+			
+			
+		]]>
+	</mx:Script>
+</mx:Button>
